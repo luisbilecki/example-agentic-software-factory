@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import FastAPI, HTTPException, Query, Response, status
 
 from app.models import Customer, CustomerCreate, CustomerUpdate
-from app.repository import CustomerRepository
+from app.repository import CustomerRepository, DuplicateEmailError
 
 app = FastAPI(title="Customers CRUD API", version="0.1.0")
 repository = CustomerRepository()
@@ -13,8 +13,12 @@ def healthcheck() -> dict[str, str]:
 
 
 @app.get("/customers", response_model=list[Customer])
-def list_customers(email: str | None = None) -> list[Customer]:
-    return repository.list(email=email)
+def list_customers(
+    email: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> list[Customer]:
+    return repository.list(email=email, limit=limit, offset=offset)
 
 
 @app.get("/customers/{customer_id}", response_model=Customer)
@@ -27,12 +31,32 @@ def get_customer(customer_id: int) -> Customer:
 
 @app.post("/customers", response_model=Customer, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate) -> Customer:
-    return repository.create(payload)
+    try:
+        return repository.create(payload)
+    except DuplicateEmailError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer email already exists",
+        ) from exc
 
 
 @app.put("/customers/{customer_id}", response_model=Customer)
 def update_customer(customer_id: int, payload: CustomerUpdate) -> Customer:
-    customer = repository.update(customer_id, payload)
+    try:
+        customer = repository.update(customer_id, payload)
+    except DuplicateEmailError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer email already exists",
+        ) from exc
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    return customer
+
+
+@app.patch("/customers/{customer_id}/deactivate", response_model=Customer)
+def deactivate_customer(customer_id: int) -> Customer:
+    customer = repository.deactivate(customer_id)
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return customer
