@@ -1,0 +1,14 @@
+{
+  "issues": [
+    {
+      "number": 1,
+      "title": "Adicionar filtro opcional por email no GET /customers",
+      "body": "Permitir filtrar clientes via query param opcional `email` (busca parcial case-insensitive) no endpoint `GET /customers`, com testes automatizados em `tests/test_customers_api.py`.",
+      "labels": [
+        "agent:ready"
+      ],
+      "comments": []
+    }
+  ],
+  "pull_requests": []
+}
