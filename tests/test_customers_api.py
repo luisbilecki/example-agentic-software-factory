@@ -94,6 +94,60 @@ def test_not_found_errors(client: TestClient) -> None:
     assert client.delete("/customers/999").status_code == 404
 
 
+<<<<<<< HEAD
+def test_create_customer_duplicate_email_returns_409(client: TestClient) -> None:
+    first = client.post(
+        "/customers",
+        json={"name": "Ada Lovelace", "email": "ada@example.com"},
+    )
+    assert first.status_code == 201
+
+    duplicate_exact = client.post(
+        "/customers",
+        json={"name": "Another Ada", "email": "ada@example.com"},
+    )
+    assert duplicate_exact.status_code == 409
+    assert duplicate_exact.json() == {"detail": "Customer email already exists"}
+
+    duplicate_case_insensitive = client.post(
+        "/customers",
+        json={"name": "Upper Ada", "email": "ADA@EXAMPLE.COM"},
+    )
+    assert duplicate_case_insensitive.status_code == 409
+    assert duplicate_case_insensitive.json() == {"detail": "Customer email already exists"}
+
+
+def test_update_customer_duplicate_email_returns_409(client: TestClient) -> None:
+    c1 = client.post(
+        "/customers",
+        json={"name": "Ada Lovelace", "email": "ada@example.com"},
+    ).json()
+    c2 = client.post(
+        "/customers",
+        json={"name": "Grace Hopper", "email": "grace@example.com"},
+    ).json()
+
+    conflict = client.put(
+        f"/customers/{c2['id']}",
+        json={"email": "ADA@example.com"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json() == {"detail": "Customer email already exists"}
+
+    # Ensure customer 2 was not modified
+    fetched = client.get(f"/customers/{c2['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["email"] == "grace@example.com"
+
+    # Updating the same customer keeping their own email (same or different case) succeeds
+    same_email = client.put(
+        f"/customers/{c1['id']}",
+        json={"name": "Augusta Ada", "email": "Ada@Example.com"},
+    )
+    assert same_email.status_code == 200
+    assert same_email.json()["name"] == "Augusta Ada"
+    assert same_email.json()["email"] == "Ada@Example.com"
+=======
 def test_list_customers_pagination(client: TestClient) -> None:
     for i in range(1, 6):
         response = client.post(
@@ -160,3 +214,4 @@ def test_list_customers_pagination_invalid_params(
 ) -> None:
     response = client.get("/customers", params=params)
     assert response.status_code == 422
+>>>>>>> origin/main

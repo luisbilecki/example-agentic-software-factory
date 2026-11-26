@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, Response, status
 
 from app.models import Customer, CustomerCreate, CustomerUpdate
-from app.repository import CustomerRepository
+from app.repository import CustomerRepository, DuplicateEmailError
 
 app = FastAPI(title="Customers CRUD API", version="0.1.0")
 repository = CustomerRepository()
@@ -30,12 +30,24 @@ def get_customer(customer_id: int) -> Customer:
 
 @app.post("/customers", response_model=Customer, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate) -> Customer:
-    return repository.create(payload)
+    try:
+        return repository.create(payload)
+    except DuplicateEmailError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer email already exists",
+        ) from exc
 
 
 @app.put("/customers/{customer_id}", response_model=Customer)
 def update_customer(customer_id: int, payload: CustomerUpdate) -> Customer:
-    customer = repository.update(customer_id, payload)
+    try:
+        customer = repository.update(customer_id, payload)
+    except DuplicateEmailError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer email already exists",
+        ) from exc
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return customer
