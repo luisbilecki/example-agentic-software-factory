@@ -38,6 +38,14 @@ def update_customer(customer_id: int, payload: CustomerUpdate) -> Customer:
     return customer
 
 
+@app.patch("/customers/{customer_id}/deactivate", response_model=Customer)
+def deactivate_customer(customer_id: int) -> Customer:
+    customer = repository.deactivate(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    return customer
+
+
 @app.delete("/customers/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_customer(customer_id: int) -> Response:
     deleted = repository.delete(customer_id)
