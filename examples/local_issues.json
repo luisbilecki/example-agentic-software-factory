@@ -8,6 +8,33 @@
         "agent:ready"
       ],
       "comments": []
+    },
+    {
+      "number": 2,
+      "title": "Garantir unicidade de email retornando 409 Conflict",
+      "body": "Impedir cadastro (`POST /customers`) ou atualização (`PUT /customers/{id}`) com um `email` já utilizado por outro cliente (comparação case-insensitive), retornando HTTP `409 Conflict`. Permitir atualizar o mesmo cliente mantendo seu próprio email. Cobrir com testes em `tests/test_customers_api.py`.",
+      "labels": [
+        "agent:ready"
+      ],
+      "comments": []
+    },
+    {
+      "number": 3,
+      "title": "Adicionar paginação (limit e offset) no GET /customers",
+      "body": "Adicionar query params opcionais `limit` (default 50, min 1, max 100) e `offset` (default 0, min 0) no endpoint `GET /customers`, aplicando paginação após os filtros existentes. Cobrir com testes em `tests/test_customers_api.py`.",
+      "labels": [
+        "agent:ready"
+      ],
+      "comments": []
+    },
+    {
+      "number": 4,
+      "title": "Adicionar endpoint PATCH /customers/{id}/deactivate",
+      "body": "Criar rota `PATCH /customers/{customer_id}/deactivate` que define `active = False` e retorna o cliente atualizado (`200 OK`), ou `404 Not Found` se não existir. Cobrir com testes em `tests/test_customers_api.py`.",
+      "labels": [
+        "agent:ready"
+      ],
+      "comments": []
     }
   ],
   "pull_requests": []

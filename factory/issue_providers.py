@@ -24,6 +24,12 @@ class IssueProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def create_issue(
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> Issue:
+        raise NotImplementedError
+
+    @abstractmethod
     def create_pull_request(
         self, issue: Issue, branch: str, title: str, body: str
     ) -> str:
@@ -82,6 +88,31 @@ class LocalJsonProvider(IssueProvider):
                 item.setdefault("comments", []).append(body)
                 break
         self._save(data)
+
+    def create_issue(
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> Issue:
+        data = self._load()
+        issues = data.setdefault("issues", [])
+        next_number = max((item["number"] for item in issues), default=0) + 1
+        issue_labels = list(labels) if labels is not None else ["agent:ready"]
+        issues.append(
+            {
+                "number": next_number,
+                "title": title,
+                "body": body,
+                "labels": issue_labels,
+                "comments": [],
+            }
+        )
+        self._save(data)
+        return Issue(
+            number=next_number,
+            title=title,
+            body=body,
+            labels=issue_labels,
+            url=f"local://issues/{next_number}",
+        )
 
     def create_pull_request(
         self, issue: Issue, branch: str, title: str, body: str
@@ -153,6 +184,18 @@ class GitHubCliProvider(IssueProvider):
 
     def add_comment(self, issue_number: int, body: str) -> None:
         self._gh(["issue", "comment", str(issue_number), "--body", body])
+
+    def create_issue(
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> Issue:
+        issue_labels = list(labels) if labels is not None else ["agent:ready"]
+        args = ["issue", "create", "--title", title, "--body", body]
+        for lb in issue_labels:
+            args.extend(["--label", lb])
+        url = self._gh(args)
+        tail = url.rstrip("/").split("/")[-1]
+        number = int(tail) if tail.isdigit() else 0
+        return Issue(number=number, title=title, body=body, labels=issue_labels, url=url)
 
     def create_pull_request(
         self, issue: Issue, branch: str, title: str, body: str

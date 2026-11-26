@@ -85,8 +85,20 @@ uv run uvicorn app.main:app --reload
 ```
 Documentação interativa em `http://127.0.0.1:8000/docs`.
 
-### 3. Rodar a Fábrica em Modo Local (sem repositório remoto)
-Teste todo o ciclo (incluindo `git worktree` real, `ruff`, `pytest` e revisão) usando `examples/local_issues.json` e o agente `mock`:
+### 3. Gerar Issues a partir de uma Spec/PRD (Agente Planejador)
+Você pode partir de uma especificação em [`specs/001-customers-enhancements.md`](specs/001-customers-enhancements.md) para gerar issues atômicas automaticamente:
+```bash
+# Modo mock (extrai as seções `### Task:` da Spec)
+uv run python -m factory.planner --spec specs/001-customers-enhancements.md --provider local --agent mock
+
+# Modo Antigravity (`agy`) criando issues direto no GitHub
+uv run python -m factory.planner --spec specs/001-customers-enhancements.md --provider github --agent antigravity
+```
+
+### 4. Rodar a Fábrica em Modo Local (sem repositório remoto)
+O arquivo [`examples/local_issues.json`](examples/local_issues.json) já vem com 4 issues de exemplo prontas (`filtro por email`, `unicidade de email 409`, `paginação limit/offset` e `PATCH /deactivate`).
+
+Teste todo o ciclo (incluindo `git worktree` real, `ruff`, `pytest` e revisão) usando o agente `mock`:
 ```bash
 uv run python -m factory.orchestrator --provider local --agent mock
 ```
@@ -96,7 +108,7 @@ Ou usando o **Antigravity (`agy`)** localmente sobre o JSON de issues:
 uv run python -m factory.orchestrator --provider local --agent antigravity
 ```
 
-### 4. Rodar a Fábrica conectada ao GitHub Real
+### 5. Rodar a Fábrica conectada ao GitHub Real
 Pré-requisitos: repositório com remote `origin` configurado, `gh auth login` ativo e labels `agent:ready`, `agent:in-progress`, `agent:done`, `agent:needs-human` criadas no GitHub.
 ```bash
 uv run python -m factory.orchestrator --provider github --agent antigravity --max-turns 3
