@@ -6,6 +6,61 @@ Para fins de demonstração, a aplicação alvo é uma **API CRUD de Clientes (F
 
 ## Arquitetura v2
 
+### Fluxo da Máquina de Estados
+
+```mermaid
+flowchart TD
+    A["Issue com label agent:ready"] --> B["Claim: troca para agent:in-progress"]
+    B --> C["Isolamento: cria git worktree (branch agent/issue-N)"]
+    C --> D["Agente Implementador (Antigravity / agy)"]
+    D --> E{"Validação Determinística (ruff + pytest)"}
+    E -- "Falhou (turn < max_turns)" --> D
+    E -- "Passou" --> F["Agente Revisor (contexto limpo sobre git diff)"]
+    F -- "Reprovado com findings (turn < max_turns)" --> D
+    F -- "Aprovado" --> G["Finalização: Conventional Commit + Push + PR + agent:done"]
+    E -- "Limite excedido" --> H["Escalonamento: comentário diagnóstico + agent:needs-human"]
+    F -- "Limite excedido" --> H
+```
+
+### Sequência de Execução entre Componentes
+
+```mermaid
+sequenceDiagram
+    participant GH as IssueProvider (GitHub / JSON)
+    participant ORC as Orquestrador
+    participant WT as Git Worktree
+    participant IMP as Agente Implementador (agy)
+    participant VAL as Validador (ruff + pytest)
+    participant REV as Agente Revisor (agy)
+
+    ORC->>GH: Busca issues com label agent:ready
+    ORC->>GH: Troca label para agent:in-progress
+    ORC->>WT: Cria worktree isolado (.worktrees/issue-N)
+
+    loop Até max_turns
+        ORC->>IMP: Envia issue + regras (AGENTS.md) + feedback anterior
+        IMP-->>WT: Edita código e testes
+        ORC->>VAL: Executa ruff check e pytest no worktree
+        alt Testes ou lint falharam
+            VAL-->>ORC: Retorna logs de erro (feedback)
+        else Validação passou
+            ORC->>WT: Extrai git diff
+            ORC->>REV: Envia issue + git diff (contexto limpo)
+            alt Revisor reprovou
+                REV-->>ORC: JSON {approved: false, findings: [...]}
+            else Revisor aprovou
+                REV-->>ORC: JSON {approved: true, summary: "..."}
+                ORC->>WT: Commit (Conventional Commits) + Push
+                ORC->>GH: Abre PR, comenta resumo e aplica agent:done
+            end
+        end
+    end
+
+    ORC->>WT: Remove worktree temporário
+```
+
+### Etapas em Resumo
+
 1. **Trigger por Label**: O orquestrador busca issues com a label `agent:ready` e troca para `agent:in-progress`.
 2. **Isolamento por `git worktree`**: Cada issue roda em `.worktrees/issue-<N>` na branch `agent/issue-<N>`.
 3. **Agente Implementador**: Executa seguindo as regras do [`AGENTS.md`](AGENTS.md).
