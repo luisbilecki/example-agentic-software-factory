@@ -177,10 +177,53 @@ class PRReviewOrchestrator:
                     pr.number,
                     decision.summary,
                 )
+                try:
+                    self.provider.merge_pr(pr)
+                except subprocess.CalledProcessError as exc:
+                    err_detail = (exc.stderr or exc.stdout or str(exc)).strip()
+                    logger.warning(
+                        "[Issue #%s | PR #%s] Falha no merge (possível conflito com main): %s",
+                        issue.number,
+                        pr.number,
+                        err_detail,
+                    )
+                    self.provider.comment_on_pr(
+                        pr,
+                        "PR aprovado tecnicamente, mas o merge automático falhou "
+                        "(possível conflito com `main`). Acionando Agente Corretor para "
+                        f"sincronizar com `main` e resolver conflitos.\n\n```\n{err_detail}\n```",
+                    )
+                    worktree_path = self.workspace.checkout_existing(issue.number, pr.branch)
+                    try:
+                        clean, merge_output = self.workspace.sync_with_main(worktree_path)
+                        if not clean:
+                            conflict_feedback = (
+                                f"Resolva os conflitos com `origin/main` no PR #{pr.number}, "
+                                "mantenha todas as funcionalidades e garanta `ruff` e `pytest` "
+                                f"passando 100%.\n\nSaída do git merge:\n{merge_output}"
+                            )
+                            self.fixer.implement(worktree_path, issue, feedback=conflict_feedback)
+                        validation = self.validator.run(worktree_path)
+                        if not validation.passed:
+                            self.fixer.implement(
+                                worktree_path,
+                                issue,
+                                feedback=f"Corrija falhas pós-merge:\n{validation.output}",
+                            )
+                        self.workspace.commit_all(
+                            worktree_path,
+                            f"fix(customers): resolve merge conflicts for PR #{pr.number}",
+                        )
+                        if self.push_to_remote:
+                            self.workspace.push_branch(worktree_path, pr.branch)
+                    finally:
+                        if self.cleanup_worktree:
+                            self.workspace.cleanup(worktree_path)
+                    continue
+
                 self.provider.comment_on_pr(
                     pr, f"Aprovado pelo Revisor de PR (auto-merge).\n\n{decision.summary}"
                 )
-                self.provider.merge_pr(pr)
                 self.provider.swap_labels(
                     issue.number, remove=[LABEL_DONE], add=[LABEL_MERGED]
                 )

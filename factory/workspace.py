@@ -48,6 +48,25 @@ class WorktreeManager:
         self._git(["worktree", "add", str(worktree_path), branch])
         return worktree_path
 
+    def sync_with_main(self, worktree_path: Path) -> tuple[bool, str]:
+        """Faz fetch e merge de origin/main no worktree. Retorna (clean, output)."""
+        subprocess.run(
+            ["git", "fetch", "origin", "main"],
+            cwd=worktree_path,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        proc = subprocess.run(
+            ["git", "merge", "origin/main", "--no-edit"],
+            cwd=worktree_path,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = (proc.stdout + "\n" + proc.stderr).strip()
+        return proc.returncode == 0, output
+
     def get_diff(self, worktree_path: Path) -> str:
         self._git(["add", "-A"], cwd=worktree_path)
         diff = self._git(["diff", "--cached"], cwd=worktree_path)
