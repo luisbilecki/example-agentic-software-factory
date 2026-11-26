@@ -31,6 +31,9 @@ class CustomerRepository:
         self._items[customer_id] = updated
         return updated
 
+    def deactivate(self, customer_id: int) -> Customer | None:
+        return self.update(customer_id, CustomerUpdate(active=False))
+
     def delete(self, customer_id: int) -> bool:
         return self._items.pop(customer_id, None) is not None
 

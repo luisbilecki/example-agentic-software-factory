@@ -60,7 +60,35 @@ def test_crud_customer_lifecycle(client: TestClient) -> None:
     assert missing.status_code == 404
 
 
+def test_deactivate_customer(client: TestClient) -> None:
+    created = client.post(
+        "/customers",
+        json={"name": "Grace Hopper", "email": "grace@example.com", "active": True},
+    )
+    assert created.status_code == 201
+    customer_id = created.json()["id"]
+
+    deactivated = client.patch(f"/customers/{customer_id}/deactivate")
+    assert deactivated.status_code == 200
+    assert deactivated.json() == {
+        "id": customer_id,
+        "name": "Grace Hopper",
+        "email": "grace@example.com",
+        "active": False,
+    }
+
+    fetched = client.get(f"/customers/{customer_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["active"] is False
+
+    # Idempotente quando já está inativo
+    deactivated_again = client.patch(f"/customers/{customer_id}/deactivate")
+    assert deactivated_again.status_code == 200
+    assert deactivated_again.json()["active"] is False
+
+
 def test_not_found_errors(client: TestClient) -> None:
     assert client.get("/customers/999").status_code == 404
     assert client.put("/customers/999", json={"name": "Ghost"}).status_code == 404
+    assert client.patch("/customers/999/deactivate").status_code == 404
     assert client.delete("/customers/999").status_code == 404
