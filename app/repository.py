@@ -8,8 +8,12 @@ class CustomerRepository:
         self._items: dict[int, Customer] = {}
         self._next_id: int = 1
 
-    def list(self) -> list[Customer]:
-        return list(self._items.values())
+    def list(self, email: str | None = None) -> list[Customer]:
+        customers = list(self._items.values())
+        if email is None:
+            return customers
+        needle = email.lower()
+        return [customer for customer in customers if needle in customer.email.lower()]
 
     def get(self, customer_id: int) -> Customer | None:
         return self._items.get(customer_id)

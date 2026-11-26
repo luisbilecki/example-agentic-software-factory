@@ -13,8 +13,8 @@ def healthcheck() -> dict[str, str]:
 
 
 @app.get("/customers", response_model=list[Customer])
-def list_customers() -> list[Customer]:
-    return repository.list()
+def list_customers(email: str | None = None) -> list[Customer]:
+    return repository.list(email=email)
 
 
 @app.get("/customers/{customer_id}", response_model=Customer)

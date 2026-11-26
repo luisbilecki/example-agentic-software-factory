@@ -64,3 +64,37 @@ def test_not_found_errors(client: TestClient) -> None:
     assert client.get("/customers/999").status_code == 404
     assert client.put("/customers/999", json={"name": "Ghost"}).status_code == 404
     assert client.delete("/customers/999").status_code == 404
+
+
+def test_list_customers_filter_by_email(client: TestClient) -> None:
+    client.post(
+        "/customers",
+        json={"name": "Ada Lovelace", "email": "Ada.Lovelace@Example.com", "active": True},
+    )
+    client.post(
+        "/customers",
+        json={"name": "Grace Hopper", "email": "grace@navy.mil", "active": True},
+    )
+    client.post(
+        "/customers",
+        json={"name": "Alan Turing", "email": "alan@example.com", "active": False},
+    )
+
+    # Sem filtro retorna todos os clientes
+    all_response = client.get("/customers")
+    assert all_response.status_code == 200
+    assert len(all_response.json()) == 3
+
+    # Busca parcial case-insensitive
+    domain_response = client.get("/customers", params={"email": "EXAMPLE.COM"})
+    assert domain_response.status_code == 200
+    assert [c["name"] for c in domain_response.json()] == ["Ada Lovelace", "Alan Turing"]
+
+    partial_response = client.get("/customers", params={"email": "lovelace"})
+    assert partial_response.status_code == 200
+    assert [c["email"] for c in partial_response.json()] == ["Ada.Lovelace@Example.com"]
+
+    # Sem correspondência retorna lista vazia
+    empty_response = client.get("/customers", params={"email": "naoexiste@test.com"})
+    assert empty_response.status_code == 200
+    assert empty_response.json() == []
