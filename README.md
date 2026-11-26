@@ -1,6 +1,8 @@
-# Example Software Factory (Agentic v2)
+# Exemplo de Fábrica de Software Agêntica (v2)
 
-Exemplo básico e funcional de **Fábrica de Software Agêntica v2** orientada a GitHub Issues, usando uma **API CRUD de Clientes (FastAPI)** como aplicação alvo e o **Antigravity (`agy`)** como agente executor padrão (com registro extensível para `codex`, `claude`, etc.).
+> **Aviso**: Este repositório é um **exemplo didático e de referência** de uma **Fábrica de Software Agêntica v2** orientada a GitHub Issues. Ele demonstra na prática como estruturar um orquestrador de issues que dispara agentes para implementar, validar, revisar e finalizar entregas automaticamente.
+
+Para fins de demonstração, a aplicação alvo é uma **API CRUD de Clientes (FastAPI)** simples e o executor padrão configurado é o **Antigravity (`agy`)**, com arquitetura extensível para outros agentes (`codex`, `claude`, etc.).
 
 ## Arquitetura v2
 
