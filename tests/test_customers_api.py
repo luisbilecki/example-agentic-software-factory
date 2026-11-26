@@ -64,3 +64,71 @@ def test_not_found_errors(client: TestClient) -> None:
     assert client.get("/customers/999").status_code == 404
     assert client.put("/customers/999", json={"name": "Ghost"}).status_code == 404
     assert client.delete("/customers/999").status_code == 404
+
+
+def test_list_customers_pagination(client: TestClient) -> None:
+    for i in range(1, 6):
+        response = client.post(
+            "/customers",
+            json={"name": f"Customer {i}", "email": f"customer{i}@example.com", "active": True},
+        )
+        assert response.status_code == 201
+
+    page_1 = client.get("/customers", params={"limit": 2, "offset": 0})
+    assert page_1.status_code == 200
+    assert [c["id"] for c in page_1.json()] == [1, 2]
+
+    page_2 = client.get("/customers", params={"limit": 2, "offset": 2})
+    assert page_2.status_code == 200
+    assert [c["id"] for c in page_2.json()] == [3, 4]
+
+    page_3 = client.get("/customers", params={"limit": 2, "offset": 4})
+    assert page_3.status_code == 200
+    assert [c["id"] for c in page_3.json()] == [5]
+
+    empty_page = client.get("/customers", params={"limit": 2, "offset": 10})
+    assert empty_page.status_code == 200
+    assert empty_page.json() == []
+
+
+def test_list_customers_pagination_defaults_and_limits(client: TestClient) -> None:
+    for i in range(1, 106):
+        response = client.post(
+            "/customers",
+            json={"name": f"Customer {i}", "email": f"customer{i}@example.com", "active": True},
+        )
+        assert response.status_code == 201
+
+    default_response = client.get("/customers")
+    assert default_response.status_code == 200
+    default_items = default_response.json()
+    assert len(default_items) == 50
+    assert default_items[0]["id"] == 1
+    assert default_items[-1]["id"] == 50
+
+    min_limit = client.get("/customers", params={"limit": 1, "offset": 0})
+    assert min_limit.status_code == 200
+    assert len(min_limit.json()) == 1
+    assert min_limit.json()[0]["id"] == 1
+
+    max_limit = client.get("/customers", params={"limit": 100, "offset": 0})
+    assert max_limit.status_code == 200
+    assert len(max_limit.json()) == 100
+    assert max_limit.json()[-1]["id"] == 100
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"limit": 0},
+        {"limit": -1},
+        {"limit": 101},
+        {"offset": -1},
+        {"limit": 0, "offset": -5},
+    ],
+)
+def test_list_customers_pagination_invalid_params(
+    client: TestClient, params: dict[str, int]
+) -> None:
+    response = client.get("/customers", params=params)
+    assert response.status_code == 422

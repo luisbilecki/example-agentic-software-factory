@@ -8,8 +8,9 @@ class CustomerRepository:
         self._items: dict[int, Customer] = {}
         self._next_id: int = 1
 
-    def list(self) -> list[Customer]:
-        return list(self._items.values())
+    def list(self, limit: int = 50, offset: int = 0) -> list[Customer]:
+        items = list(self._items.values())
+        return items[offset : offset + limit]
 
     def get(self, customer_id: int) -> Customer | None:
         return self._items.get(customer_id)
