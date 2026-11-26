@@ -40,6 +40,14 @@ class WorktreeManager:
         self._git(["worktree", "add", str(worktree_path), "-b", branch, base_ref])
         return worktree_path, branch
 
+    def checkout_existing(self, issue_number: int, branch: str) -> Path:
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        worktree_path = self.base_dir / f"pr-issue-{issue_number}"
+        if worktree_path.exists():
+            self.cleanup(worktree_path)
+        self._git(["worktree", "add", str(worktree_path), branch])
+        return worktree_path
+
     def get_diff(self, worktree_path: Path) -> str:
         self._git(["add", "-A"], cwd=worktree_path)
         diff = self._git(["diff", "--cached"], cwd=worktree_path)

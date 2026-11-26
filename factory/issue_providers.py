@@ -3,7 +3,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from factory.models import Issue
+from factory.models import Issue, PullRequest
 
 
 class IssueProvider(ABC):
@@ -33,6 +33,26 @@ class IssueProvider(ABC):
     def create_pull_request(
         self, issue: Issue, branch: str, title: str, body: str
     ) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_open_pr_for_issue(self, issue_number: int) -> PullRequest | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_pr_diff(self, pr: PullRequest) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def comment_on_pr(self, pr: PullRequest, body: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def merge_pr(self, pr: PullRequest) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close_pr(self, pr: PullRequest, reason: str) -> None:
         raise NotImplementedError
 
 
@@ -128,10 +148,60 @@ class LocalJsonProvider(IssueProvider):
                 "title": title,
                 "body": body,
                 "url": pr_url,
+                "state": "open",
+                "comments": [],
             }
         )
         self._save(data)
         return pr_url
+
+    def find_open_pr_for_issue(self, issue_number: int) -> PullRequest | None:
+        data = self._load()
+        for item in data.get("pull_requests", []):
+            if item.get("issue_number") == issue_number and item.get("state", "open") == "open":
+                return PullRequest(
+                    number=item["number"],
+                    issue_number=issue_number,
+                    branch=item["branch"],
+                    title=item["title"],
+                    url=item.get("url", ""),
+                    state=item.get("state", "open"),
+                )
+        return None
+
+    def get_pr_diff(self, pr: PullRequest) -> str:
+        proc = subprocess.run(
+            ["git", "diff", f"main...{pr.branch}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return proc.stdout.strip()
+
+    def comment_on_pr(self, pr: PullRequest, body: str) -> None:
+        data = self._load()
+        for item in data.get("pull_requests", []):
+            if item["number"] == pr.number:
+                item.setdefault("comments", []).append(body)
+                break
+        self._save(data)
+
+    def merge_pr(self, pr: PullRequest) -> None:
+        data = self._load()
+        for item in data.get("pull_requests", []):
+            if item["number"] == pr.number:
+                item["state"] = "merged"
+                break
+        self._save(data)
+
+    def close_pr(self, pr: PullRequest, reason: str) -> None:
+        self.comment_on_pr(pr, reason)
+        data = self._load()
+        for item in data.get("pull_requests", []):
+            if item["number"] == pr.number:
+                item["state"] = "closed"
+                break
+        self._save(data)
 
 
 class GitHubCliProvider(IssueProvider):
@@ -212,3 +282,42 @@ class GitHubCliProvider(IssueProvider):
                 body,
             ]
         )
+
+    def find_open_pr_for_issue(self, issue_number: int) -> PullRequest | None:
+        branch = f"agent/issue-{issue_number}"
+        raw = self._gh(
+            [
+                "pr",
+                "list",
+                "--head",
+                branch,
+                "--state",
+                "open",
+                "--json",
+                "number,title,url,headRefName,state",
+            ]
+        )
+        items = json.loads(raw or "[]")
+        if not items:
+            return None
+        pr = items[0]
+        return PullRequest(
+            number=pr["number"],
+            issue_number=issue_number,
+            branch=pr["headRefName"],
+            title=pr["title"],
+            url=pr.get("url", ""),
+            state="open",
+        )
+
+    def get_pr_diff(self, pr: PullRequest) -> str:
+        return self._gh(["pr", "diff", str(pr.number)])
+
+    def comment_on_pr(self, pr: PullRequest, body: str) -> None:
+        self._gh(["pr", "comment", str(pr.number), "--body", body])
+
+    def merge_pr(self, pr: PullRequest) -> None:
+        self._gh(["pr", "merge", str(pr.number), "--squash", "--delete-branch"])
+
+    def close_pr(self, pr: PullRequest, reason: str) -> None:
+        self._gh(["pr", "close", str(pr.number), "--comment", reason])

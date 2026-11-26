@@ -114,6 +114,21 @@ Pré-requisitos: repositório com remote `origin` configurado, `gh auth login` a
 uv run python -m factory.orchestrator --provider github --agent antigravity --max-turns 3
 ```
 
+### 6. Agente Especializado Revisor de PRs (`agent:done`)
+Pega todas as issues com `agent:done`, revisa o PR aberto e decide entre:
+- `approve_and_merge`: aprova e faz merge automático (`agent:merged`)
+- `approve_needs_human`: aprova tecnicamente e pede decisão final humana (`agent:ready-for-human`)
+- `request_changes`: dispara o agente corretor no worktree da branch do PR, valida e pede nova revisão
+- `reject`: fecha/rejeita o PR (`agent:rejected`)
+
+```bash
+# Modo local (mock)
+uv run python -m factory.pr_reviewer --provider local --agent mock
+
+# Modo GitHub real com Antigravity (`agy`)
+uv run python -m factory.pr_reviewer --provider github --agent antigravity --max-rounds 3
+```
+
 ## Extensibilidade para Outros Agentes (Codex, Claude, etc.)
 
 Em [`factory/agents.py`](factory/agents.py), basta implementar uma subclasse de `AgentRunner` e registrá-la em `AGENT_REGISTRY`:

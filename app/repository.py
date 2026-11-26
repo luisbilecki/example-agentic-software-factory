@@ -12,6 +12,7 @@ class CustomerRepository:
         self._items: dict[int, Customer] = {}
         self._next_id: int = 1
 
+<<<<<<< HEAD
     def _has_duplicate_email(self, email: str, exclude_customer_id: int | None = None) -> bool:
         normalized = email.casefold()
         return any(
@@ -21,6 +22,11 @@ class CustomerRepository:
 
     def list(self) -> list[Customer]:
         return list(self._items.values())
+=======
+    def list(self, limit: int = 50, offset: int = 0) -> list[Customer]:
+        items = list(self._items.values())
+        return items[offset : offset + limit]
+>>>>>>> origin/main
 
     def get(self, customer_id: int) -> Customer | None:
         return self._items.get(customer_id)
@@ -49,6 +55,9 @@ class CustomerRepository:
         updated = Customer(**updated_data)
         self._items[customer_id] = updated
         return updated
+
+    def deactivate(self, customer_id: int) -> Customer | None:
+        return self.update(customer_id, CustomerUpdate(active=False))
 
     def delete(self, customer_id: int) -> bool:
         return self._items.pop(customer_id, None) is not None

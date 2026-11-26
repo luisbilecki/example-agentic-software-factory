@@ -1,4 +1,5 @@
 import argparse
+import logging
 import re
 from pathlib import Path
 
@@ -7,6 +8,8 @@ from factory.issue_providers import GitHubCliProvider, IssueProvider, LocalJsonP
 from factory.models import Issue, RunResult
 from factory.validator import DeterministicValidator
 from factory.workspace import WorktreeManager
+
+logger = logging.getLogger("factory.orchestrator")
 
 LABEL_READY = "agent:ready"
 LABEL_IN_PROGRESS = "agent:in-progress"
@@ -64,38 +67,108 @@ class SoftwareFactoryOrchestrator:
         self.cleanup_worktree = cleanup_worktree
 
     def process_issue(self, issue: Issue) -> RunResult:
+        logger.info("[Issue #%s] Iniciando: %s", issue.number, issue.title)
+        logger.info(
+            "[Issue #%s] Trocando label '%s' -> '%s'",
+            issue.number,
+            LABEL_READY,
+            LABEL_IN_PROGRESS,
+        )
         self.provider.swap_labels(
             issue.number, remove=[LABEL_READY], add=[LABEL_IN_PROGRESS]
         )
         worktree_path, branch = self.workspace.create(issue.number)
+        logger.info(
+            "[Issue #%s] Worktree isolado criado em %s (branch: %s)",
+            issue.number,
+            worktree_path,
+            branch,
+        )
         feedback: str | None = None
 
         try:
             for turn in range(1, self.max_turns + 1):
+                mode_label = "retrabalho" if feedback else "implementação inicial"
+                logger.info(
+                    "[Issue #%s] Tentativa %d/%d — Executando Agente Implementador (%s)...",
+                    issue.number,
+                    turn,
+                    self.max_turns,
+                    mode_label,
+                )
                 # 1. Implementação
                 self.agent.implement(worktree_path, issue, feedback=feedback)
 
                 # 2. Validação determinística (backpressure: ruff + pytest)
+                logger.info(
+                    "[Issue #%s] Tentativa %d/%d — Rodando validação (ruff + pytest)...",
+                    issue.number,
+                    turn,
+                    self.max_turns,
+                )
                 validation = self.validator.run(worktree_path)
                 if not validation.passed:
+                    logger.warning(
+                        "[Issue #%s] Tentativa %d/%d — Validação FALHOU. Retrabalho.",
+                        issue.number,
+                        turn,
+                        self.max_turns,
+                    )
                     feedback = f"Validação falhou (tentativa {turn}):\n{validation.output}"
                     continue
+                logger.info(
+                    "[Issue #%s] Tentativa %d/%d — Validação PASSOU!",
+                    issue.number,
+                    turn,
+                    self.max_turns,
+                )
 
                 # 3. Revisão independente (contexto limpo sobre o git diff)
+                logger.info(
+                    "[Issue #%s] Tentativa %d/%d — Executando Agente Revisor (contexto limpo)...",
+                    issue.number,
+                    turn,
+                    self.max_turns,
+                )
                 diff = self.workspace.get_diff(worktree_path)
                 review = self.agent.review(worktree_path, issue, diff)
                 if not review.approved:
+                    logger.warning(
+                        "[Issue #%s] Tentativa %d/%d — Revisor REPROVOU (%d finding(s)): %s",
+                        issue.number,
+                        turn,
+                        self.max_turns,
+                        len(review.findings),
+                        review.summary,
+                    )
                     findings_text = "\n".join(f"- {f}" for f in review.findings)
                     feedback = (
                         f"Revisão reprovada (tentativa {turn}): {review.summary}\n"
                         f"{findings_text}"
                     )
                     continue
+                logger.info(
+                    "[Issue #%s] Tentativa %d/%d — Revisor APROVOU: %s",
+                    issue.number,
+                    turn,
+                    self.max_turns,
+                    review.summary,
+                )
 
                 # 4. Finalização: Conventional Commit + Push (se remoto) + PR + Label Done
                 commit_msg = format_conventional_commit(issue)
+                logger.info(
+                    "[Issue #%s] Fazendo commit: %s",
+                    issue.number,
+                    commit_msg.splitlines()[0],
+                )
                 self.workspace.commit_all(worktree_path, commit_msg)
                 if self.push_to_remote:
+                    logger.info(
+                        "[Issue #%s] Enviando branch '%s' para origin...",
+                        issue.number,
+                        branch,
+                    )
                     self.workspace.push_branch(worktree_path, branch)
 
                 pr_title = commit_msg.splitlines()[0]
@@ -104,6 +177,7 @@ class SoftwareFactoryOrchestrator:
                     f"Closes #{issue.number}\n\n"
                     f"### Resumo da Revisão\n{review.summary}"
                 )
+                logger.info("[Issue #%s] Abrindo Pull Request...", issue.number)
                 pr_url = self.provider.create_pull_request(
                     issue=issue, branch=branch, title=pr_title, body=pr_body
                 )
@@ -113,6 +187,12 @@ class SoftwareFactoryOrchestrator:
                 self.provider.add_comment(
                     issue.number,
                     f"Concluído em {turn} tentativa(s). PR: {pr_url}\n\nRevisão: {review.summary}",
+                )
+                logger.info(
+                    "[Issue #%s] Finalizada com sucesso! PR: %s (label: %s)",
+                    issue.number,
+                    pr_url,
+                    LABEL_DONE,
                 )
                 return RunResult(
                     issue_number=issue.number,
@@ -124,6 +204,12 @@ class SoftwareFactoryOrchestrator:
                 )
 
             # Limite de tentativas atingido -> escalonar para humano
+            logger.error(
+                "[Issue #%s] Limite de %d tentativas atingido. Escalonando (%s).",
+                issue.number,
+                self.max_turns,
+                LABEL_NEEDS_HUMAN,
+            )
             self.provider.swap_labels(
                 issue.number, remove=[LABEL_IN_PROGRESS], add=[LABEL_NEEDS_HUMAN]
             )
@@ -144,14 +230,22 @@ class SoftwareFactoryOrchestrator:
             )
         finally:
             if self.cleanup_worktree:
+                logger.info("[Issue #%s] Limpando worktree %s...", issue.number, worktree_path)
                 self.workspace.cleanup(worktree_path)
 
     def run_once(self) -> list[RunResult]:
+        logger.info("Buscando issues com a label '%s'...", LABEL_READY)
         issues = self.provider.list_ready_issues(LABEL_READY)
+        logger.info("Encontradas %d issue(s) prontas para execução.", len(issues))
         return [self.process_issue(issue) for issue in issues]
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-7s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
     parser = argparse.ArgumentParser(
         description="Orquestrador da Fábrica de Software Agêntica v2"
     )

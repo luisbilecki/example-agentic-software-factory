@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import FastAPI, HTTPException, Query, Response, status
 
 from app.models import Customer, CustomerCreate, CustomerUpdate
 from app.repository import CustomerRepository, DuplicateEmailError
@@ -13,8 +13,11 @@ def healthcheck() -> dict[str, str]:
 
 
 @app.get("/customers", response_model=list[Customer])
-def list_customers() -> list[Customer]:
-    return repository.list()
+def list_customers(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> list[Customer]:
+    return repository.list(limit=limit, offset=offset)
 
 
 @app.get("/customers/{customer_id}", response_model=Customer)
@@ -45,6 +48,14 @@ def update_customer(customer_id: int, payload: CustomerUpdate) -> Customer:
             status_code=status.HTTP_409_CONFLICT,
             detail="Customer email already exists",
         ) from exc
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    return customer
+
+
+@app.patch("/customers/{customer_id}/deactivate", response_model=Customer)
+def deactivate_customer(customer_id: int) -> Customer:
+    customer = repository.deactivate(customer_id)
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return customer
