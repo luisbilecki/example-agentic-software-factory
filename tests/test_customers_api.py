@@ -94,7 +94,40 @@ def test_not_found_errors(client: TestClient) -> None:
     assert client.delete("/customers/999").status_code == 404
 
 
-<<<<<<< HEAD
+def test_list_customers_filter_by_email(client: TestClient) -> None:
+    client.post(
+        "/customers",
+        json={"name": "Ada Lovelace", "email": "Ada.Lovelace@Example.com", "active": True},
+    )
+    client.post(
+        "/customers",
+        json={"name": "Grace Hopper", "email": "grace@navy.mil", "active": True},
+    )
+    client.post(
+        "/customers",
+        json={"name": "Alan Turing", "email": "alan@example.com", "active": False},
+    )
+
+    # Sem filtro retorna todos os clientes
+    all_response = client.get("/customers")
+    assert all_response.status_code == 200
+    assert len(all_response.json()) == 3
+
+    # Busca parcial case-insensitive
+    domain_response = client.get("/customers", params={"email": "EXAMPLE.COM"})
+    assert domain_response.status_code == 200
+    assert [c["name"] for c in domain_response.json()] == ["Ada Lovelace", "Alan Turing"]
+
+    partial_response = client.get("/customers", params={"email": "lovelace"})
+    assert partial_response.status_code == 200
+    assert [c["email"] for c in partial_response.json()] == ["Ada.Lovelace@Example.com"]
+
+    # Sem correspondência retorna lista vazia
+    empty_response = client.get("/customers", params={"email": "naoexiste@test.com"})
+    assert empty_response.status_code == 200
+    assert empty_response.json() == []
+
+
 def test_create_customer_duplicate_email_returns_409(client: TestClient) -> None:
     first = client.post(
         "/customers",
@@ -147,7 +180,8 @@ def test_update_customer_duplicate_email_returns_409(client: TestClient) -> None
     assert same_email.status_code == 200
     assert same_email.json()["name"] == "Augusta Ada"
     assert same_email.json()["email"] == "Ada@Example.com"
-=======
+
+
 def test_list_customers_pagination(client: TestClient) -> None:
     for i in range(1, 6):
         response = client.post(
@@ -214,4 +248,3 @@ def test_list_customers_pagination_invalid_params(
 ) -> None:
     response = client.get("/customers", params=params)
     assert response.status_code == 422
->>>>>>> origin/main
